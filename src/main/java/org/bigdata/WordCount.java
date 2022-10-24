@@ -19,11 +19,15 @@ import scala.Tuple2;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Iterator;
 
 public class WordCount {
-
+    {
+        System.setProperty("HADOOP_USER_NAME", "root");
+    }
+    public static final String HDFSUrlPre = "hdfs://192.168.146.128:9000/user/root/";
     public static void main(String[] args){
         WordCount.oprateHDFS();
 
@@ -37,13 +41,13 @@ public class WordCount {
 //        spark.stop();
     }
     private static void oprateHDFS(){
-        String content="";
+        String content;
         StringBuilder builder = new StringBuilder();
         File file = new File("src/main/resources/text.txt");
-        String hdfsFilePath = "hdfs://192.168.146.128:9000/user/root/text.txt";
+        String hdfsFilePath = WordCount.HDFSUrlPre+"text.txt";
         try {
             //读取文件
-            InputStreamReader streamReader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8);
+            InputStreamReader streamReader = new InputStreamReader(Files.newInputStream(file.toPath()), StandardCharsets.UTF_8);
             BufferedReader bufferedReader=new BufferedReader(streamReader);
             while ((content=bufferedReader.readLine())!= null){
                 builder.append(content);
@@ -51,9 +55,6 @@ public class WordCount {
 
             //写入hdfs
             Configuration conf = new Configuration();
-            conf.set("fs.defaultFS","hdfs://192.168.146.128:9000");
-            conf.set("HADOOP_USER_NAME", "root");
-
             FileSystem fileSystem = FileSystem.get(conf);
             Path writePath = new Path(hdfsFilePath);
             FSDataOutputStream outputStream = fileSystem.create(writePath);
@@ -66,30 +67,30 @@ public class WordCount {
         }
     }
     private static void wordCount(){
-        System.setProperty("HADOOP_USER_NAME", "root");
         SparkConf conf=new SparkConf();
         conf.setAppName("WordCountJava")
                 .setMaster("local").set("spark.testing.memory","1147480000");
-        JavaSparkContext sc=new JavaSparkContext(conf);
-        String path="hdfs://192.168.146.128:9000/user/root/text.txt";
 
-        JavaRDD<String> linesRDD=sc.textFile(path);
-        //flatMap和mapToPair都是对RDD中的元素调用指定函数，区别在于参数和返回值
-        JavaRDD<String> wordsRDD = linesRDD.flatMap((FlatMapFunction<String, String>) line -> Arrays.asList(line.split(" ")).iterator());
-        JavaPairRDD<String,Integer> pairRDD = wordsRDD.mapToPair((PairFunction<String, String, Integer>) word -> new Tuple2<String,Integer>(word,1));
-        //reduceByKey合并key
-        JavaPairRDD<String,Integer> wordCountRDD = pairRDD.reduceByKey((Function2<Integer, Integer, Integer>) (integer, integer2) -> integer+integer2);
+        try(JavaSparkContext sc=new JavaSparkContext(conf);){
+            String path= WordCount.HDFSUrlPre+"/text.txt";
 
-        String outputPath = "hdfs://192.168.146.128:9000/user/root/wordCount";
-        try{
+            JavaRDD<String> linesRDD=sc.textFile(path);
+            //flatMap和mapToPair都是对RDD中的元素调用指定函数，区别在于参数和返回值
+            JavaRDD<String> wordsRDD = linesRDD.flatMap((FlatMapFunction<String, String>) line -> Arrays.asList(line.split(" ")).iterator());
+            JavaPairRDD<String,Integer> pairRDD = wordsRDD.mapToPair((PairFunction<String, String, Integer>) word -> new Tuple2<String,Integer>(word,1));
+            //reduceByKey合并key
+            JavaPairRDD<String,Integer> wordCountRDD = pairRDD.reduceByKey((Function2<Integer, Integer, Integer>) (integer, integer2) -> integer+integer2);
+
+            String outputPath =  WordCount.HDFSUrlPre+"wordCount";
+
             Configuration outputConf = new Configuration();
             FileSystem fileSystem = FileSystem.get(outputConf);
             Path writePath = new Path(outputPath);
             fileSystem.delete(writePath,true);
             wordCountRDD.saveAsHadoopFile(outputPath, Text.class,Text.class, TextOutputFormat.class);
+            sc.stop();
         }catch (Exception e){
             System.out.println(e.getMessage());
         }
-        sc.stop();
     }
 }
