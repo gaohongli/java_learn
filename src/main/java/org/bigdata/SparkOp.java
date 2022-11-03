@@ -13,14 +13,15 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.api.java.function.VoidFunction;
 import scala.Tuple2;
 
 import java.util.Arrays;
 
-public class WordCount {
+public class SparkOp {
     {
-        System.setProperty("HADOOP_USER_NAME", "meepo_test1");
-//        System.setProperty("HADOOP_USER_NAME", "root");
+//        System.setProperty("HADOOP_USER_NAME", "meepo_test1");
+        System.setProperty("HADOOP_USER_NAME", "root");
     }
 
 //    public static final String HDFSUrlPre = "hdfs://ns1";
@@ -29,7 +30,7 @@ public class WordCount {
     public static final String HDFSWorkPath = HDFSUrlPre + "/user/root/";
     public static final String articlePath = HDFSWorkPath + "article.txt";
     private FileSystem fileSystem;
-    public WordCount(){
+    public SparkOp(){
         Configuration conf = new Configuration();
         conf.set("fs.defaultFS",HDFSUrlPre);
         try {
@@ -39,17 +40,25 @@ public class WordCount {
         }
     }
     public static void main(String[] args){
-        WordCount wordCount = new WordCount();
-        wordCount.oprateHDFS();
+        SparkOp sparkOp = new SparkOp();
+        sparkOp.oprateHDFS();
 
         //单词数统计
-        wordCount.wordCount();
+        sparkOp.wordCount();
+
+        sparkOp.groupTopN();
 
 //        SparkConf sparkConf=new SparkConf().setAppName("WordCountJava").setMaster("local").set("spark.testing.memory","1147480000");
 //        SparkSession spark=SparkSession.builder().config(sparkConf).enableHiveSupport().getOrCreate();
 //        spark.sql("use test");
 //        spark.sql("select * from word_count").show(false);
 //        spark.stop();
+    }
+    public static SparkConf getSparkConf(){
+        SparkConf conf=new SparkConf();
+        conf.setAppName("WordCountJava");
+        conf.setMaster("local").set("spark.testing.memory","1147480000"); //本地调试使用，提交到集群请注释掉
+        return conf;
     }
     private void oprateHDFS(){
         try {
@@ -68,17 +77,14 @@ public class WordCount {
         }
     }
     private void wordCount(){
-        SparkConf conf=new SparkConf();
-        conf.setAppName("WordCountJava");
-//        conf.setMaster("local").set("spark.testing.memory","1147480000");
-        try(JavaSparkContext sc=new JavaSparkContext(conf);){
+        try(JavaSparkContext sc=new JavaSparkContext(getSparkConf())){
             JavaRDD<String> linesRDD=sc.textFile(articlePath);
             //flatMap和mapToPair都是对RDD中的元素调用指定函数，区别在于参数和返回值
             JavaRDD<String> wordsRDD = linesRDD.flatMap((FlatMapFunction<String, String>) line -> Arrays.asList(line.split(" ")).iterator());
             JavaPairRDD<String,Integer> pairRDD = wordsRDD.mapToPair((PairFunction<String, String, Integer>) word -> new Tuple2<String,Integer>(word,1));
             //reduceByKey合并key
             JavaPairRDD<String,Integer> wordCountRDD = pairRDD.reduceByKey((Function2<Integer, Integer, Integer>) (integer, integer2) -> integer+integer2);
-            String outputPath =  WordCount.HDFSWorkPath+"/wordCount";
+            String outputPath =  SparkOp.HDFSWorkPath+"/wordCount";
             Path writePath = new Path(outputPath);
             if(fileSystem.exists(writePath)){
                 fileSystem.delete(writePath,true);
@@ -89,4 +95,34 @@ public class WordCount {
             System.out.println(e.getMessage());
         }
     }
+    private void groupTopN(){
+        try(JavaSparkContext sc=new JavaSparkContext(getSparkConf())){
+            JavaRDD<String> linesRDD=sc.textFile("hdfs://192.168.146.128:9000/user/root/stu_score.txt");
+            JavaPairRDD<String,Integer> oneScore = linesRDD.mapToPair(new PairFunction<String,String,Integer>(){
+                public Tuple2<String,Integer> call(String line){
+                    String[] score= line.split(" ");
+                    return new Tuple2<>(score[0], Integer.parseInt(score[1]));
+                }
+            });
+            JavaPairRDD<String, Iterable<Integer>> groupScore = oneScore.groupByKey();
+            groupScore.foreach(new VoidFunction<Tuple2<String, Iterable<Integer>>>() {
+                @Override
+                public void call(Tuple2<String, Iterable<Integer>> stringIterableTuple2){
+                    int currentCount=0;
+                    for (Integer oneScore: stringIterableTuple2._2) {
+                        if(currentCount>3){
+                            return;
+                        }
+                        System.out.println("姓名："+stringIterableTuple2._1);
+                        System.out.println("成绩："+oneScore);
+                        currentCount++;
+                    }
+                    System.out.println("------------------");
+                }
+            });
+        }catch (Exception e){
+            System.out.println(e.getMessage());
+        }
+    }
+
 }
