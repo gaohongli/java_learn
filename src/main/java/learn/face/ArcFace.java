@@ -29,11 +29,20 @@ public class ArcFace {
     private static final Logger logger = Logger.getLogger(JavaCV.class);
 
     public static void main(String[] args) throws FrameGrabber.Exception {
+        String appId = "Fisgvi3GnKP1KxL2Xve5xtUZvKBzk3zEG8wmrNrsqd6o";
+        String sdkKey = "F1ZDsN5ekwBizQLVJw23DR4yifBoJNDjiEazFGD1pakP";
         //识别库初始化
-        FaceEngine faceEngine = new FaceEngine("E:\\code\\java_learn\\src\\main\\resources\\lib");
+        FaceEngine faceEngine = new FaceEngine("D:\\code\\java_learn\\src\\main\\resources\\lib");
+
+        //激活引擎
+        int errorCode = faceEngine.activeOnline(appId, sdkKey);
+        if (errorCode != ErrorInfo.MOK.getValue() && errorCode != ErrorInfo.MERR_ASF_ALREADY_ACTIVATED.getValue()) {
+            System.out.println("引擎激活失败");
+        }
+
         //激活信息
         ActiveFileInfo activeFileInfo=new ActiveFileInfo();
-        int errorCode = faceEngine.getActiveFileInfo(activeFileInfo);
+        errorCode = faceEngine.getActiveFileInfo(activeFileInfo);
         if (errorCode != ErrorInfo.MOK.getValue() && errorCode != ErrorInfo.MERR_ASF_ALREADY_ACTIVATED.getValue()) {
             System.out.println("获取激活文件信息失败，返回代码：" + errorCode);
         } else {
@@ -64,9 +73,9 @@ public class ArcFace {
             System.out.println("初始化引擎失败");
         }
 
-        basic(faceEngine);
-        //writeFeature();
-        //openCam();
+        //basic(faceEngine);
+        //writeFeature(faceEngine);
+        openCam(faceEngine);
     }
 
     public static void basic(FaceEngine faceEngine){
@@ -135,19 +144,8 @@ public class ArcFace {
         errorCode = faceEngine.getLiveness(livenessInfoList);
         System.out.println("活体：" + livenessInfoList.get(0).getLiveness());
     }
-    public static void writeFeature(){
-
-        //识别库初始化
-        FaceEngine faceEngine = new FaceEngine("E:\\code\\java_learn\\src\\main\\resources\\lib");
-
-        //激活信息
-        ActiveFileInfo activeFileInfo=new ActiveFileInfo();
-        int errorCode = faceEngine.getActiveFileInfo(activeFileInfo);
-        if (errorCode != ErrorInfo.MOK.getValue() && errorCode != ErrorInfo.MERR_ASF_ALREADY_ACTIVATED.getValue()) {
-            logger.debug("获取激活文件信息失败，返回代码：" + errorCode);
-        } else {
-            logger.debug("获取激活文件信息成功，返回代码：" + errorCode);
-        }
+    public static void writeFeature(FaceEngine faceEngine){
+        int errorCode;
         //引擎配置
         EngineConfiguration engineConfiguration = new EngineConfiguration();
         engineConfiguration.setDetectMode(DetectMode.ASF_DETECT_MODE_IMAGE);//图像模式
@@ -165,13 +163,6 @@ public class ArcFace {
         functionConfiguration.setSupportLiveness(true); //活体检测
         //functionConfiguration.setSupportIRLiveness(true); //红外活体检测
         engineConfiguration.setFunctionConfiguration(functionConfiguration);
-
-        //初始化引擎
-        errorCode = faceEngine.init(engineConfiguration);
-
-        if (errorCode != ErrorInfo.MOK.getValue()) {
-            logger.debug("初始化引擎失败" + errorCode);
-        }
 
         //获取目录的路径
         //使用相对路径
@@ -251,8 +242,7 @@ public class ArcFace {
      *
      * @throws FrameGrabber.Exception
      */
-    public static void openCam() throws FrameGrabber.Exception {
-        FaceEngine faceEngine = new FaceEngine("E:\\code\\java_learn\\src\\main\\resources\\lib");
+    public static void openCam(FaceEngine faceEngine) throws FrameGrabber.Exception {
 
         ActiveFileInfo activeFileInfo = new ActiveFileInfo();
         AtomicInteger errorCode = new AtomicInteger(faceEngine.getActiveFileInfo(activeFileInfo));
